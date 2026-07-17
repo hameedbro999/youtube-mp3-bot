@@ -16,6 +16,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Install FFmpeg
         run: |
           sudo apt-get update
@@ -23,7 +28,8 @@ jobs:
 
       - name: Install libraries
         run: |
-          pip install python-telegram-bot yt-dlp
+          python -m pip install --upgrade pip
+          python -m pip install -U yt-dlp python-telegram-bot
 
       - name: Run bot
         env:
