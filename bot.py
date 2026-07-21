@@ -1,4 +1,5 @@
 import os
+import glob
 import yt_dlp
 
 from telegram import Update
@@ -7,199 +8,114 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters
+    filters,
 )
-
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 
 
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🎵 أرسل رابط يوتيوب"
+        "🎵 مرحبًا!\n\n"
+        "أرسل رابط فيديو من Odysee وسأقوم بتحويله إلى MP3 وإرساله لك."
     )
 
 
-async def download_audio(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def download_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     url = update.message.text.strip()
 
-    if (
-        "youtube.com" not in url
-        and "youtu.be" not in url
-    ):
-
+    if "odysee.com" not in url:
         await update.message.reply_text(
-            "❌ أرسل رابط يوتيوب صحيح"
+            "❌ الرجاء إرسال رابط صحيح من موقع Odysee."
         )
-
         return
 
-
     status = await update.message.reply_text(
-        "⏳ جاري التحميل..."
+        "⏳ جاري تحميل الفيديو..."
     )
 
+    os.makedirs("downloads", exist_ok=True)
 
-    os.makedirs(
-        "downloads",
-        exist_ok=True
-    )
-
-
-    options = {
-
+    ydl_opts = {
         "format": "bestaudio/best",
 
-        "outtmpl":
-        "downloads/%(id)s.%(ext)s",
+        "outtmpl": "downloads/%(id)s.%(ext)s",
 
         "writethumbnail": True,
 
         "postprocessors": [
-
             {
-
-                "key":
-                "FFmpegExtractAudio",
-
-                "preferredcodec":
-                "mp3",
-
-                "preferredquality":
-                "192"
-
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
             },
-
             {
-
-                "key":
-                "EmbedThumbnail"
-
+                "key": "EmbedThumbnail",
             },
-
             {
-
-                "key":
-                "FFmpegMetadata"
-
-            }
-
-        ]
-
+                "key": "FFmpegMetadata",
+            },
+        ],
     }
-
 
     try:
 
-        with yt_dlp.YoutubeDL(
-            options
-        ) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
-            info = ydl.extract_info(
-                url,
-                download=True
-            )
+            info = ydl.extract_info(url, download=True)
 
+            video_id = info["id"]
+            title = info.get("title", "Audio")
+            uploader = info.get("uploader", "Odysee")
 
-        video_id = info["id"]
+        mp3_file = f"downloads/{video_id}.mp3"
 
-        title = info.get(
-            "title",
-            "Audio"
-        )
+        await status.edit_text("📤 جاري إرسال الملف...")
 
-
-        filename = (
-            f"downloads/{video_id}.mp3"
-        )
-
-
-        await status.edit_text(
-            "📤 جاري إرسال الملف..."
-        )
-
-
-        with open(
-            filename,
-            "rb"
-        ) as audio:
+        with open(mp3_file, "rb") as audio:
 
             await update.message.reply_audio(
-
                 audio=audio,
-
-                title=title[:64],
-
-                caption=(
-                    f"🎵 {title}"
-                )
-
+                title=title,
+                performer=uploader,
+                caption=f"🎵 {title}",
             )
 
-
-        os.remove(filename)
-
+        for file in glob.glob(f"downloads/{video_id}.*"):
+            try:
+                os.remove(file)
+            except:
+                pass
 
         await status.delete()
 
+    except Exception as e:
 
-    except Exception as error:
-
-        print(error)
-
+        print(e)
 
         await status.edit_text(
-
-            "❌ حدث خطأ أثناء التحميل"
-
+            "❌ حدث خطأ أثناء تحميل الفيديو أو تحويله."
         )
 
 
 def main():
 
-    app = (
-        Application
-        .builder()
-        .token(BOT_TOKEN)
-        .build()
-    )
+    app = Application.builder().token(BOT_TOKEN).build()
 
+    app.add_handler(CommandHandler("start", start))
 
     app.add_handler(
-
-        CommandHandler(
-            "start",
-            start
-        )
-
-    )
-
-
-    app.add_handler(
-
         MessageHandler(
-
-            filters.TEXT
-            & ~filters.COMMAND,
-
-            download_audio
-
+            filters.TEXT & ~filters.COMMAND,
+            download_audio,
         )
-
     )
 
+    print("Bot is running...")
 
     app.run_polling()
 
 
 if __name__ == "__main__":
-
     main()
